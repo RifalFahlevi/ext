@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sistem Sortir Buku External</title>
+  <title>Sistem Sortir Buku External (Akumulasi Qty Judul)</title>
   
   <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
   
   <style>
     * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { padding: 20px; background-color: #f4f7f6; max-width: 800px; margin: auto; }
+    body { padding: 20px; background-color: #f4f7f6; max-width: 850px; margin: auto; }
     h2 { color: #333; text-align: center; margin-bottom: 15px; }
     
     .tab-nav { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -18,10 +18,20 @@
 
     .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
     .form-group { display: flex; flex-direction: column; gap: 12px; }
-    .input-row { display: flex; gap: 10px; }
+    
+    /* Input Row & Clear Button (X) */
+    .input-row { display: flex; gap: 10px; position: relative; }
+    .input-container { position: relative; flex: 1; display: flex; align-items: center; }
+    .input-container input { width: 100%; padding-right: 35px; }
+    .btn-clear-input { 
+      position: absolute; right: 8px; background: #dc3545; color: white; 
+      border: none; border-radius: 50%; width: 22px; height: 22px; 
+      font-size: 12px; font-weight: bold; cursor: pointer; display: none; 
+      align-items: center; justify-content: center; line-height: 1;
+    }
+    
     input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
     input[readonly] { background-color: #e9ecef; color: #495057; font-weight: bold; }
-    .input-id { flex: 1; }
     .input-qty { width: 100px; text-align: center; font-weight: bold; }
     .input-supplier { width: 100%; background-color: #e2f3f5; font-weight: bold; color: #0056b3; }
     
@@ -32,8 +42,16 @@
     .btn-sync { background-color: #17a2b8; margin-bottom: 10px; width: 100%; }
     .btn-scan { background-color: #007bff; margin-bottom: 10px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; }
     .btn-scan:hover { background-color: #0056b3; }
-    .btn-export { background-color: #ffc107; color: #212529; width: 100%; margin-top: 10px; font-weight: bold; }
+    .btn-export { background-color: #ffc107; color: #212529; flex: 1; font-weight: bold; }
     .btn-export:hover { background-color: #e0a800; }
+    .btn-clear-all { background-color: #dc3545; color: white; width: 160px; font-weight: bold; }
+    .btn-clear-all:hover { background-color: #c82333; }
+
+    .btn-delete-row {
+      background-color: #dc3545; color: white; border: none; padding: 4px 8px;
+      border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold;
+    }
+    .btn-delete-row:hover { background-color: #bd2130; }
 
     .status-msg { font-size: 13px; margin-top: -5px; font-weight: bold; }
     
@@ -65,6 +83,7 @@
       pointer-events: none;
     }
     .scan-box-info { font-size: 12px; color: #555; margin-top: 8px; line-height: 1.4; }
+    .action-group { display: flex; gap: 10px; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -105,7 +124,10 @@
 
       <form id="bookForm2" class="form-group">
         <div class="input-row">
-          <input type="text" id="inputId2" class="input-id" placeholder="Ketik/Scan ID atau ISBN" required oninput="cariJudulOtomatis()" autofocus>
+          <div class="input-container">
+            <input type="text" id="inputId2" placeholder="Ketik/Scan ID atau ISBN" required oninput="handleInputSearch()" autofocus>
+            <button type="button" id="btnClearInput" class="btn-clear-input" onclick="clearSearchInput()" title="Hapus teks input">✕</button>
+          </div>
           <input type="number" id="inputQty2" class="input-qty" value="1" min="1" placeholder="Qty" required>
         </div>
         <input type="text" id="inputJudul2" placeholder="Judul Buku (Otomatis)" readonly style="width: 100%;">
@@ -130,28 +152,33 @@
       <table>
         <thead>
           <tr>
-            <th style="width: 18%;">ID Buku</th>
-            <th style="width: 22%;">ISBN</th>
+            <th style="width: 16%;">ID Buku</th>
+            <th style="width: 20%;">ISBN</th>
             <th>Judul Buku</th>
-            <th style="width: 20%;">Supplier</th>
-            <th style="width: 10%; text-align: center;">Qty</th>
+            <th style="width: 18%;">Supplier</th>
+            <th style="width: 8%; text-align: center;">Qty</th>
+            <th style="width: 10%; text-align: center;">Aksi</th>
           </tr>
         </thead>
         <tbody id="bookTableBody2">
-          <tr><td colspan="5" style="text-align:center;">Memuat data...</td></tr>
+          <tr><td colspan="6" style="text-align:center;">Memuat data...</td></tr>
         </tbody>
       </table>
-      <button class="btn-export" onclick="exportToCSV()">📥 Tarik Log Rekap External (CSV/Excel)</button>
+      
+      <div class="action-group">
+        <button class="btn-export" onclick="exportToCSV()">Tarik data</button>
+        <button class="btn-clear-all" onclick="clearAllLogs()">🗑️ Hapus Semua Log</button>
+      </div>
     </div>
   </div>
 
   <script>
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzZ3i4YkDjF8NJDyk8Zp51-gD6i-y-H1g0MsMbqTEicdUwY2FogDEZuBMDQG3AW_efp/exec";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbypVfx2bdvZs-NDuBwI8lCa0zQusekNFxMFBT6Wi5YZw2lvws8TCaFQZ4PrZaah2Pw/exec";
 
     let masterMapExt = new Map(); 
     let listBukuSimpan2 = [];
     let isScanning = false;
-    let currentMatchedItem = null; // Menyimpan objek buku yang terdeteksi
+    let currentMatchedItem = null;
 
     document.addEventListener("DOMContentLoaded", () => {
       loadLocalMaster();
@@ -198,7 +225,8 @@
             buildMasterMap(data.masterExternal);
           }
           
-          listBukuSimpan2 = data.simpanExternal || [];
+          // Mengonsolidasikan/Mengakumulasikan data mentah jika ada duplicate dari backend
+          listBukuSimpan2 = consolidateLogs(data.simpanExternal || []);
           renderTable2();
 
           if (forceReload && statusMsg) {
@@ -208,6 +236,38 @@
           }
         })
         .catch(err => console.error("Error load data:", err));
+    }
+
+    // FUNGSI KHUSUS UNTUK MEMASTIKAN REKAP LOKAL SELALU TERAKUMULASI (AKUMULASI BRUTO)
+    function consolidateLogs(rawLogs) {
+      const resultMap = new Map();
+
+      rawLogs.forEach(item => {
+        const key = cleanID(item.id) !== "" ? cleanID(item.id) : cleanID(item.isbn);
+        if (!key) return;
+
+        if (resultMap.has(key)) {
+          resultMap.get(key).qty += item.qty;
+        } else {
+          resultMap.set(key, { ...item });
+        }
+      });
+
+      return Array.from(resultMap.values());
+    }
+
+    function handleInputSearch() {
+      const inputVal = document.getElementById("inputId2").value;
+      const btnClear = document.getElementById("btnClearInput");
+      btnClear.style.display = inputVal.trim() !== "" ? "flex" : "none";
+      cariJudulOtomatis();
+    }
+
+    function clearSearchInput() {
+      document.getElementById("inputId2").value = "";
+      document.getElementById("btnClearInput").style.display = "none";
+      cariJudulOtomatis();
+      document.getElementById("inputId2").focus();
     }
 
     function toggleScanner() {
@@ -283,7 +343,7 @@
         if (codeBuffer.length === 2 && codeBuffer[0] === codeBuffer[1]) {
           codeBuffer = [];
           document.getElementById("inputId2").value = rawCode;
-          cariJudulOtomatis();
+          handleInputSearch();
           toggleScanner();
         } else {
           hint.style.color = "#28a745";
@@ -331,6 +391,7 @@
       }
     }
 
+    // SIMPAN DATA + PENGAKUMULASIAN OTOMATIS
     document.getElementById("bookForm2").addEventListener("submit", function(e) {
       e.preventDefault();
       
@@ -347,27 +408,25 @@
         mode: "external" 
       };
 
-      // Cek akumulasi di tabel log berdasarkan ID atau ISBN
-      const indexExisting = listBukuSimpan2.findIndex(item => 
-        (cleanID(item.id) === cleanID(currentMatchedItem.id) && item.id !== "-") || 
-        (cleanID(item.isbn) === cleanID(currentMatchedItem.isbn) && item.isbn !== "-")
-      );
+      // LOGIKA AKUMULASI: Cari apakah ID atau ISBN sudah ada di daftar rekap
+      const indexExisting = listBukuSimpan2.findIndex(item => {
+        const idMatch = cleanID(item.id) !== "" && cleanID(item.id) === cleanID(currentMatchedItem.id);
+        const isbnMatch = cleanID(item.isbn) !== "" && cleanID(item.isbn) === cleanID(currentMatchedItem.isbn);
+        return idMatch || isbnMatch;
+      });
 
       if (indexExisting !== -1) {
+        // Jika JUDUL SUDAH ADA -> Tambahkan Qty-nya pada baris yang sama (Akumulasi)
         listBukuSimpan2[indexExisting].qty += qtyVal;
       } else {
+        // Jika JUDUL BELUM ADA -> Tambah baris baru
         listBukuSimpan2.unshift(dataBaru);
       }
 
       renderTable2();
 
-      document.getElementById("inputId2").value = "";
-      document.getElementById("inputJudul2").value = "";
-      document.getElementById("inputSupplier2").value = "";
+      clearSearchInput();
       document.getElementById("inputQty2").value = "1";
-      document.getElementById("statusMsg2").textContent = "";
-      document.getElementById("btnSimpan2").disabled = true;
-      document.getElementById("inputId2").focus();
 
       fetch(SCRIPT_URL, {
         method: "POST",
@@ -393,7 +452,7 @@
 
       tbody.innerHTML = "";
       if (sortedData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada data External.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data External.</td></tr>';
         return;
       }
 
@@ -405,12 +464,46 @@
             <td><strong>${book.judul}</strong></td>
             <td><span style="color:#0056b3; font-weight:bold;">${book.supplier || '-'}</span></td>
             <td style="text-align: center;"><span style="background:#007bff; color:white; padding:2px 8px; border-radius:10px; font-weight:bold;">${book.qty}</span></td>
+            <td style="text-align: center;">
+              <button class="btn-delete-row" onclick="deleteRowLog('${book.id}', '${book.isbn}')" title="Hapus judul ini">🗑️ Hapus</button>
+            </td>
           </tr>
         `;
       });
     }
 
-    // EXPORT REKAP DATA (ID DAN ISBN TERPISAH DALAM KOLOM BERBEDA)
+    // FITUR HAPUS 1 BARIS JUDUL LOG
+    function deleteRowLog(id, isbn) {
+      if (!confirm("Apakah Anda yakin ingin menghapus judul buku ini dari rekap?")) return;
+
+      listBukuSimpan2 = listBukuSimpan2.filter(item => {
+        const idMatch = cleanID(item.id) !== "" && cleanID(item.id) === cleanID(id);
+        const isbnMatch = cleanID(item.isbn) !== "" && cleanID(item.isbn) === cleanID(isbn);
+        return !(idMatch || isbnMatch);
+      });
+
+      renderTable2();
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "delete_row", id: id, isbn: isbn })
+      }).catch(err => console.error(err));
+    }
+
+    // FITUR HAPUS SEMUA LOG
+    function clearAllLogs() {
+      if (listBukuSimpan2.length === 0) return alert("Log rekap sudah kosong.");
+      if (!confirm("⚠️ PERINGATAN: Apakah Anda yakin ingin MENGHAPUS SEMUA LOG REKAP saat ini?")) return;
+
+      listBukuSimpan2 = [];
+      renderTable2();
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "clear_all" })
+      }).catch(err => console.error(err));
+    }
+
     function exportToCSV() {
       if (listBukuSimpan2.length === 0) return alert("Data log External masih kosong!");
       
