@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistem Sortir Buku External</title>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
+  
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { padding: 20px; background-color: #f4f7f6; max-width: 800px; margin: auto; }
+    h2 { color: #333; text-align: center; margin-bottom: 15px; }
+    
+    .tab-nav { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab-btn { flex: 1; padding: 12px; background: #007bff; border: none; font-weight: bold; cursor: pointer; border-radius: 6px; color: white; transition: 0.2s; text-align: center; }
+    .tab-btn.locked { background: #d6d6d6; color: #777; cursor: not-allowed; opacity: 0.8; }
+
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .form-group { display: flex; flex-direction: column; gap: 12px; }
+    .input-row { display: flex; gap: 10px; }
+    input { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    input[readonly] { background-color: #e9ecef; color: #495057; font-weight: bold; }
+    .input-id { flex: 1; }
+    .input-qty { width: 100px; text-align: center; font-weight: bold; }
+    .input-supplier { width: 100%; background-color: #e2f3f5; font-weight: bold; color: #0056b3; }
+    
+    button { background-color: #28a745; color: white; border: none; padding: 11px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; }
+    button:hover { background-color: #218838; }
+    button:disabled { background-color: #6c757d; cursor: not-allowed; }
+    
+    .btn-sync { background-color: #17a2b8; margin-bottom: 10px; width: 100%; }
+    .btn-scan { background-color: #007bff; margin-bottom: 10px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; }
+    .btn-scan:hover { background-color: #0056b3; }
+    .btn-export { background-color: #ffc107; color: #212529; width: 100%; margin-top: 10px; font-weight: bold; }
+    .btn-export:hover { background-color: #e0a800; }
+
+    .status-msg { font-size: 13px; margin-top: -5px; font-weight: bold; }
+    
+    .stats-container { display: flex; gap: 10px; margin-bottom: 15px; }
+    .stat-box { flex: 1; background: #e9f5ff; border: 1px solid #b6e0fe; padding: 10px; border-radius: 6px; text-align: center; }
+    .stat-box h4 { margin: 0; font-size: 12px; color: #004085; }
+    .stat-box p { margin: 5px 0 0 0; font-size: 18px; font-weight: bold; color: #007bff; }
+
+    .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; }
+    th { background-color: #343a40; color: white; }
+    tr:nth-child(even) { background-color: #f9f9f9; }
+    
+    #reader-container { display: none; margin-bottom: 15px; border: 2px dashed #007bff; padding: 10px; border-radius: 8px; background: #fff; text-align: center; position: relative; }
+    #interactive.viewport { width: 100%; height: 260px; overflow: hidden; position: relative; border-radius: 6px; }
+    #interactive.viewport canvas, #interactive.viewport video { width: 100%; height: 100%; object-fit: cover; }
+    
+    .scan-guide {
+      position: absolute;
+      top: 50%;
+      left: 10%;
+      right: 10%;
+      height: 2px;
+      background: red;
+      box-shadow: 0 0 10px red;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .scan-box-info { font-size: 12px; color: #555; margin-top: 8px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+
+  <h2>nyortir dulu kawann</h2>
+
+  <div class="tab-nav">
+    <div class="tab-btn locked" onclick="alert('Dashboard Internal saat ini dikunci.')">🔒 SORTIR INTERNAL</div>
+    <div class="tab-btn">SORTIR EXTERNAL</div>
+  </div>
+
+  <div class="card" style="padding: 10px; margin-bottom: 10px;">
+    <button type="button" class="btn-sync" onclick="fetchData(true)">Sync Master Data Terbaru</button>
+    <button type="button" class="btn-scan" onclick="toggleScanner()"><span id="btnScanText">Buka Kamera Scan Barcode</span></button>
+    
+    <div id="reader-container">
+      <div id="interactive" class="viewport">
+        <div class="scan-guide"></div>
+      </div>
+      <p class="scan-box-info" id="scannerHint">Posisikan garis barcode melintasi <b>garis merah</b></p>
+    </div>
+  </div>
+
+  <div id="tab2">
+    <div class="card">
+      <h3>Sortir External</h3>
+      
+      <div class="stats-container">
+        <div class="stat-box">
+          <h4>Total Jenis Buku</h4>
+          <p id="totalJenis2">0</p>
+        </div>
+        <div class="stat-box">
+          <h4>Total Qty Buku</h4>
+          <p id="totalQty2">0</p>
+        </div>
+      </div>
+
+      <form id="bookForm2" class="form-group">
+        <div class="input-row">
+          <input type="text" id="inputId2" class="input-id" placeholder="Ketik/Scan ID atau ISBN" required oninput="cariJudulOtomatis()" autofocus>
+          <input type="number" id="inputQty2" class="input-qty" value="1" min="1" placeholder="Qty" required>
+        </div>
+        <input type="text" id="inputJudul2" placeholder="Judul Buku (Otomatis)" readonly style="width: 100%;">
+        <input type="text" id="inputSupplier2" class="input-supplier" placeholder="Nama Supplier (Otomatis)" readonly>
+        
+        <div id="statusMsg2" class="status-msg"></div>
+        <button type="submit" id="btnSimpan2" disabled>+ Simpan Ke External</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="controls">
+        <label><strong>Log Sortir External:</strong></label>
+        <select id="sortBy2" onchange="renderTable2()">
+          <option value="id-desc">Terbaru Tambah</option>
+          <option value="qty-desc">Qty Banyak ke Sedikit</option>
+          <option value="supplier-asc">Supplier (A - Z)</option>
+          <option value="judul-asc">Judul (A - Z)</option>
+        </select>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 18%;">ID Buku</th>
+            <th style="width: 22%;">ISBN</th>
+            <th>Judul Buku</th>
+            <th style="width: 20%;">Supplier</th>
+            <th style="width: 10%; text-align: center;">Qty</th>
+          </tr>
+        </thead>
+        <tbody id="bookTableBody2">
+          <tr><td colspan="5" style="text-align:center;">Memuat data...</td></tr>
+        </tbody>
+      </table>
+      <button class="btn-export" onclick="exportToCSV()">📥 Tarik Log Rekap External (CSV/Excel)</button>
+    </div>
+  </div>
+
+  <script>
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxhqOStENPDExNhJc93QcGI8bySXcLi4Wq8w3qcBeQF5LC5CqxhoMJioc52PcTMgo97/exec";
+
+    let masterMapExt = new Map(); 
+    let listBukuSimpan2 = [];
+    let isScanning = false;
+    let currentMatchedItem = null; // Menyimpan objek buku yang terdeteksi
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadLocalMaster();
+      fetchData(false);
+    });
+
+    function loadLocalMaster() {
+      const cachedExt = localStorage.getItem("masterExtCache");
+      if (cachedExt) {
+        const arr = JSON.parse(cachedExt);
+        buildMasterMap(arr);
+      }
+    }
+
+    function cleanID(idStr) {
+      if (!idStr) return "";
+      return String(idStr).replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    }
+
+    function buildMasterMap(dataArr) {
+      masterMapExt.clear();
+      dataArr.forEach(item => {
+        const payload = { 
+          id: item.id || "-", 
+          isbn: item.isbn || "-", 
+          judul: item.judul, 
+          supplier: item.supplier || "-" 
+        };
+        
+        if (item.id) masterMapExt.set(cleanID(item.id), payload);
+        if (item.isbn) masterMapExt.set(cleanID(item.isbn), payload);
+      });
+    }
+
+    function fetchData(forceReload = false) {
+      const statusMsg = document.getElementById("statusMsg2");
+      if (forceReload && statusMsg) statusMsg.textContent = "Sedang sinkronisasi data master...";
+
+      fetch(SCRIPT_URL)
+        .then(res => res.json())
+        .then(data => {
+          if (data.masterExternal) {
+            localStorage.setItem("masterExtCache", JSON.stringify(data.masterExternal));
+            buildMasterMap(data.masterExternal);
+          }
+          
+          listBukuSimpan2 = data.simpanExternal || [];
+          renderTable2();
+
+          if (forceReload && statusMsg) {
+            statusMsg.style.color = "#28a745";
+            statusMsg.textContent = "✓ Master External berhasil diperbarui!";
+            setTimeout(() => statusMsg.textContent = "", 2000);
+          }
+        })
+        .catch(err => console.error("Error load data:", err));
+    }
+
+    function toggleScanner() {
+      const container = document.getElementById("reader-container");
+      const btnText = document.getElementById("btnScanText");
+
+      if (isScanning) {
+        stopQuagga();
+        container.style.display = "none";
+        btnText.textContent = "Buka Kamera Scan Barcode";
+        isScanning = false;
+      } else {
+        container.style.display = "block";
+        btnText.textContent = "Tutup Kamera";
+        isScanning = true;
+        startQuaggaSmooth();
+      }
+    }
+
+    function stopQuagga() {
+      try { Quagga.stop(); } catch(e) {}
+    }
+
+    function startQuaggaSmooth() {
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.querySelector("#interactive"),
+          constraints: {
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280 },
+            height: { min: 480, ideal: 720 },
+            aspectRatio: { ideal: 1.777777778 }
+          },
+          area: { top: "25%", right: "10%", left: "10%", bottom: "25%" }
+        },
+        locator: { patchSize: "medium", halfSample: false },
+        numOfWorkers: 4,
+        frequency: 12,
+        decoder: { readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader"] },
+        locate: true
+      }, function(err) {
+        if (err) { alert("Gagal membuka kamera: " + err); toggleScanner(); return; }
+
+        const videoElem = document.querySelector("#interactive video");
+        if (videoElem) {
+          videoElem.setAttribute("playsinline", "true");
+          videoElem.setAttribute("muted", "true");
+          videoElem.play().catch(e => console.log(e));
+        }
+
+        Quagga.start();
+      });
+
+      Quagga.onDetected(onBarcodeDetected);
+    }
+
+    let codeBuffer = [];
+    
+    function onBarcodeDetected(result) {
+      const rawCode = result.codeResult.code ? String(result.codeResult.code).trim() : "";
+      const cleanedCode = cleanID(rawCode);
+
+      if (!cleanedCode) return;
+
+      const hint = document.getElementById("scannerHint");
+
+      if (masterMapExt.has(cleanedCode)) {
+        codeBuffer.push(cleanedCode);
+        if (codeBuffer.length > 2) codeBuffer.shift();
+
+        if (codeBuffer.length === 2 && codeBuffer[0] === codeBuffer[1]) {
+          codeBuffer = [];
+          document.getElementById("inputId2").value = rawCode;
+          cariJudulOtomatis();
+          toggleScanner();
+        } else {
+          hint.style.color = "#28a745";
+          hint.innerHTML = `⏳ <b>Buku terdeteksi!</b> Tahan HP sebentar...`;
+        }
+      } else {
+        codeBuffer = [];
+        hint.style.color = "#dc3545";
+        hint.innerHTML = `✕ Barcode <b>${rawCode}</b> tidak terdaftar (ID/ISBN) di Master External!`;
+      }
+    }
+
+    function cariJudulOtomatis() {
+      const rawInput = document.getElementById("inputId2").value.trim();
+      const cleanedInput = cleanID(rawInput);
+      const btnSimpan = document.getElementById("btnSimpan2");
+      const statusMsg = document.getElementById("statusMsg2");
+      const inputJudul = document.getElementById("inputJudul2");
+      const inputSupplier = document.getElementById("inputSupplier2");
+
+      if (cleanedInput === "") {
+        inputJudul.value = "";
+        inputSupplier.value = "";
+        statusMsg.textContent = "";
+        btnSimpan.disabled = true;
+        currentMatchedItem = null;
+        return;
+      }
+
+      if (masterMapExt.has(cleanedInput)) {
+        currentMatchedItem = masterMapExt.get(cleanedInput);
+        inputJudul.value = currentMatchedItem.judul;
+        inputSupplier.value = `Supplier: ${currentMatchedItem.supplier}`;
+        
+        statusMsg.style.color = "#28a745";
+        statusMsg.textContent = "✓ Buku External ditemukan!";
+        btnSimpan.disabled = false;
+      } else {
+        inputJudul.value = "";
+        inputSupplier.value = "";
+        statusMsg.style.color = "#dc3545";
+        statusMsg.textContent = "✕ ID/ISBN tidak ada di Master External";
+        btnSimpan.disabled = true;
+        currentMatchedItem = null;
+      }
+    }
+
+    document.getElementById("bookForm2").addEventListener("submit", function(e) {
+      e.preventDefault();
+      
+      const qtyVal = parseInt(document.getElementById("inputQty2").value) || 1;
+
+      if (!currentMatchedItem) return;
+
+      const dataBaru = { 
+        id: currentMatchedItem.id, 
+        isbn: currentMatchedItem.isbn, 
+        judul: currentMatchedItem.judul, 
+        supplier: currentMatchedItem.supplier, 
+        qty: qtyVal, 
+        mode: "external" 
+      };
+
+      // Cek akumulasi di tabel log berdasarkan ID atau ISBN
+      const indexExisting = listBukuSimpan2.findIndex(item => 
+        (cleanID(item.id) === cleanID(currentMatchedItem.id) && item.id !== "-") || 
+        (cleanID(item.isbn) === cleanID(currentMatchedItem.isbn) && item.isbn !== "-")
+      );
+
+      if (indexExisting !== -1) {
+        listBukuSimpan2[indexExisting].qty += qtyVal;
+      } else {
+        listBukuSimpan2.unshift(dataBaru);
+      }
+
+      renderTable2();
+
+      document.getElementById("inputId2").value = "";
+      document.getElementById("inputJudul2").value = "";
+      document.getElementById("inputSupplier2").value = "";
+      document.getElementById("inputQty2").value = "1";
+      document.getElementById("statusMsg2").textContent = "";
+      document.getElementById("btnSimpan2").disabled = true;
+      document.getElementById("inputId2").focus();
+
+      fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify(dataBaru)
+      }).catch(err => console.error(err));
+    });
+
+    function renderTable2() {
+      const sortBy = document.getElementById("sortBy2").value;
+      const tbody = document.getElementById("bookTableBody2");
+
+      let sortedData = [...listBukuSimpan2];
+
+      sortedData.sort((a, b) => {
+        if (sortBy === "supplier-asc") return String(a.supplier).localeCompare(String(b.supplier));
+        if (sortBy === "judul-asc") return String(a.judul).localeCompare(String(b.judul));
+        if (sortBy === "qty-desc") return b.qty - a.qty;
+        if (sortBy === "id-desc") return 0;
+      });
+
+      document.getElementById("totalJenis2").textContent = sortedData.length;
+      document.getElementById("totalQty2").textContent = sortedData.reduce((acc, curr) => acc + curr.qty, 0);
+
+      tbody.innerHTML = "";
+      if (sortedData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Belum ada data External.</td></tr>';
+        return;
+      }
+
+      sortedData.forEach(book => {
+        tbody.innerHTML += `
+          <tr>
+            <td><code>${book.id || '-'}</code></td>
+            <td><code>${book.isbn || '-'}</code></td>
+            <td><strong>${book.judul}</strong></td>
+            <td><span style="color:#0056b3; font-weight:bold;">${book.supplier || '-'}</span></td>
+            <td style="text-align: center;"><span style="background:#007bff; color:white; padding:2px 8px; border-radius:10px; font-weight:bold;">${book.qty}</span></td>
+          </tr>
+        `;
+      });
+    }
+
+    // EXPORT REKAP DATA (ID DAN ISBN TERPISAH DALAM KOLOM BERBEDA)
+    function exportToCSV() {
+      if (listBukuSimpan2.length === 0) return alert("Data log External masih kosong!");
+      
+      let csvContent = "data:text/csv;charset=utf-8,ID Buku,ISBN,Judul Buku,Nama Supplier,Qty\n";
+      
+      listBukuSimpan2.forEach(row => {
+        csvContent += `"${row.id || '-'}","${row.isbn || '-'}","${row.judul}","${row.supplier || '-'}","${row.qty}"\n`;
+      });
+
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Log_Sortir_External_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>
